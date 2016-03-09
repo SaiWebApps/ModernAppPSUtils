@@ -40,6 +40,19 @@ function Load-Hive
     }
 }
 
+function Load-HiveToHKLM
+{
+    Param(
+        [Parameter(Mandatory = $True)]
+        [string]$FromFile,
+
+        [Parameter(Mandatory = $True)]
+        [string]$ToKey
+    )
+
+    Load-Hive -FromFile $FromFile -ToKey "HKLM\$ToKey"
+}
+
 <#
     .SYNOPSIS
     Unload the specified hive/key from the registry.
@@ -66,6 +79,19 @@ function Unload-Hive
     )
 
     [string]$output = reg unload $Key
+    if ($Verbose) {
+        $output
+    }
+}
+
+function Unload-HiveFromHKLM
+{
+    Param(
+        [Parameter(Mandatory = $True)]
+        [string]$Key
+    )
+
+    [string]$output = reg unload "HKLM\$Key"
     if ($Verbose) {
         $output
     }
@@ -143,9 +169,24 @@ function Access-ModernAppSettings
     )
 
     [string]$settingsFilePath = Get-ModernAppSettingsPath -PackageFamilyName $PackageFamilyName
-    Load-Hive -FromFile $settingsFilePath -ToKey $ToRegKey
+    Load-HiveToHKLM -FromFile $settingsFilePath -ToKey $ToRegKey
     Invoke-Command $ExecuteFunction
-    Unload-Hive -Key $ToRegKey
+    Unload-HiveFromHKLM -Key $ToRegKey
+}
+
+function New-RegProperty
+{
+    Param(
+        [string]$Name = $NULL,
+        [string]$Value = $NULL,
+        [string]$DataType = $NULL
+    )
+
+    [object]$output = New-Object -TypeName PSObject
+    Add-Member -InputObject $output -MemberType NoteProperty -Name Name -Value $Name     
+    Add-Member -InputObject $output -MemberType NoteProperty -Name Value -Value $Value
+    Add-Member -InputObject $output -MemberType NoteProperty -Name DataType -Value $DataType
+    return $output
 }
 
 function Get-ModernAppPropertyValue
@@ -164,14 +205,54 @@ function Get-ModernAppPropertyValue
     )
 
     Access-ModernAppSettings -PackageFamilyName $PackageFamilyName -ToRegKey $LoadToRegKey -ExecuteFunction {
-        [string]$output = $NULL
+        [object]$output = New-RegProperty
 
-        [string]$regQueryOutput = reg query $($LoadToRegKey + "\" + $RegPathToProperty) /v $PropertyName
+        [string]$regQueryOutput = reg query $("HKLM\" + $LoadToRegKey + "\" + $RegPathToProperty) /v $PropertyName
         [array]$tokenizeRegQueryOutput = $regQueryOutput.Split(" ") | ? { $_ }
         if ($tokenizeRegQueryOutput.Length -ge 4) {
-            $output = $tokenizeRegQueryOutput[3]
+            $output.Name = $tokenizeRegQueryOutput[1]
+            $output.Value = $tokenizeRegQueryOutput[3]
+            $output.DataType = $tokenizeRegQueryOutput[2]
         }
 
         return $output
+    }
+}
+
+function Set-ModernAppPropertyValue
+{
+    Param(
+        [Parameter(Mandatory = $True)]
+        [string]$LoadToRegKey,
+
+        [Parameter(Mandatory = $True)]
+        [string]$RegPathToProperty,
+
+        [Parameter(Mandatory = $True)]
+        [string]$PropertyName,
+
+        [Parameter(Mandatory = $True)]
+        [string]$NewValue,
+
+        [string]$PropertyType,
+
+        [string]$PackageFamilyName
+    )
+
+    [string]$fullRegKeyPath = $LoadToRegKey + "\" + $RegPathToProperty
+
+    Access-ModernAppSettings -PackageFamilyName $PackageFamilyName -ToRegKey $LoadToRegKey -ExecuteFunction {
+        if ($PropertyType) {            
+            echo "Windows Registry Editor Version 5.00`n" > none.reg
+            echo $("[HKEY_LOCAL_MACHINE\" + $fullRegKeyPath + "]`n") >> none.reg
+            echo $("`"" + $PropertyName + "`"=hex(" + $PropertyType + "):" + $NewValue) >> none.reg
+            reg import none.reg
+            del none.reg
+        }
+        else {
+            [string]$type = $(Get-ModernAppPropertyValue -PackageFamilyName $PackageFamilyName `
+                -PropertyName $PropertyName -RegPathToProperty $RegPathToProperty -LoadToRegKey $LoadToRegKey).DataType
+            reg add "HKLM\$fullRegKeyPath" /v $PropertyName /d $NewValue /t $type /f
+        }
     }
 }
