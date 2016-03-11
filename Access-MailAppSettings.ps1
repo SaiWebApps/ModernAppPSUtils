@@ -1,6 +1,8 @@
+# Mail App Global Settings
 [string]$MailAppPkgFamily = "microsoft.windowscommunicationsapps_8wekyb3d8bbwe"
 [string]$MailAppName = "microsoft.windowscommunicationsapps"
 
+# Supported accent colors
 Enum AccentColor
 {
     Azure
@@ -33,6 +35,22 @@ function Install-MailApp
     Add-AppxPackage -Register $manifestFile -DisableDevelopmentMode
 }
 
+<#
+    .SYNOPSIS
+    Return a RegProperty object containing the information about the
+    Mail App property with the given name.
+
+    .DESCRIPTION
+    Return a RegProperty object containing the information about the
+    Mail App property with the given name.
+
+    .PARAMETER Name
+    (Required)
+    Name of the target property (e.g., AccentColor)
+
+    .EXAMPLE
+    Get-MailAppProperty -Name "AccentColor"
+#>
 function Get-MailAppProperty
 {
     Param(
@@ -44,10 +62,35 @@ function Get-MailAppProperty
     [string]$regSubPath = "LocalState\OutlookSettings"
 
 	. $($PSScriptRoot + "\Access-ModernAppSettings.ps1")
-	Get-ModernAppPropertyValue -PackageFamilyName $MailAppPkgFamily -LoadToRegKey $loadToRegKey `
+	Get-ModernAppProperty -PackageFamilyName $MailAppPkgFamily -LoadToRegKey $loadToRegKey `
         -RegPathToProperty $regSubPath -PropertyName $Name
 }
 
+<#
+    .SYNOPSIS
+    Set/update the value of the target Mail app property.
+    
+    .DESCRIPTION
+    Set/update the value of the target Mail app property.
+
+    .PARAMETER Name
+    (Required)
+    Name of the target property (e.g., AccentColor).
+
+    .PARAMETER Value
+    (Required)
+    New value of target property.
+
+    .PARAMETER Type
+    (Optional)
+    New data type of target property.
+
+    .EXAMPLE
+    Set-MailAppProperty -Name "AccentColor" 
+        -Value "06,00,00,00,02,51,69,B6,A6,79,D1,01" 
+        -Type "5f5e105"
+    --> Sets Mail app accent color to azure.
+#>
 function Set-MailAppProperty
 {
     Param(
@@ -68,6 +111,22 @@ function Set-MailAppProperty
         -RegPathToProperty $regSubPath -PropertyName $Name -NewValue $Value -PropertyType $Type
 }
 
+<#
+    .SYNOPSIS
+    Change the mail app's accent color the specified color.
+
+    .DESCRIPTION
+    Change the mail app's accent color the specified color.
+
+    .PARAMETER To
+    (Required)
+    A value from the AccentColor enumeration that specifies
+    the color to which the Mail app's accent color property
+    needs to be set to.
+
+    .EXAMPLE
+    Set-MailAppAccentColor -To ([AccentColor]::Blue)
+#>
 function Set-MailAppAccentColor
 {
     Param(

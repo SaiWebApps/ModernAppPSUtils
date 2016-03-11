@@ -1,102 +1,15 @@
-<#
-    .SYNOPSIS
-    Load a specified hive into the registry.
-
-    .DESCRIPTION
-    Given a file such as "settings.dat," load the information within
-    the file into the specified registry location.
-
-    .PARAMETER FromFile
-    (Required)
-    File (e.g, settings.dat) containing subkeys and properties that can be loaded
-    into the registry.
-
-    .PARAMETER ToKey
-    (Required)
-    Path and name of the key under which the given file's contents will be loaded.
-
-    .PARAMETER Verbose
-    (Optional)
-    If specified, then show output of loading the specified hive into the registry.
-    Otherwise, do not print anything to the console.
-
-    .EXAMPLE
-    Load-Hive -FromFile $($env:UserProfile + "\AppData\Local\Packages\[App]\Setttings\settings.dat")
-        -ToKey "HKLM\[App]Settings" -Verbose
-#>
-function Load-Hive
-{
-	Param(
-		[Parameter(Mandatory = $True)]
-		[string]$FromFile,
-
-		[Parameter(Mandatory = $True)]
-		[string]$ToKey
-	)
-
-	[string]$output = reg load $ToKey $FromFile
-    if ($Verbose) {
-        $output
-    }
-}
-
-function Load-HiveToHKLM
-{
-    Param(
-        [Parameter(Mandatory = $True)]
-        [string]$FromFile,
-
-        [Parameter(Mandatory = $True)]
-        [string]$ToKey
-    )
-
-    Load-Hive -FromFile $FromFile -ToKey "HKLM\$ToKey"
-}
+. $($PSScriptRoot + "\HiveUtils.ps1")
 
 <#
     .SYNOPSIS
-    Unload the specified hive/key from the registry.
+    Display a menu with all valid package names, and prompt the user
+    to select one.
 
     .DESCRIPTION
-    Unload the specified hive/key from the registry.
-
-    .PARAMETER Key
-    (Required)
-    Registry location/path to hive that we want to unload.
-
-    .PARAMETER Verbose
-    (Optional)
-    If specified, show output of command to remove/unload the target hive from the registry.
-
-    .EXAMPLE
-    Unload-Hive -Key "HKLM\[App]Settings" -Verbose
+    Use Process-UserSelection function from Process-UserSelection.ps1
+    to show all available packages' family names and to prompt the user
+    to select one of these names. Return the name selected by the user.
 #>
-function Unload-Hive
-{
-	Param(
-        [Parameter(Mandatory = $True)]
-        [string]$Key
-    )
-
-    [string]$output = reg unload $Key
-    if ($Verbose) {
-        $output
-    }
-}
-
-function Unload-HiveFromHKLM
-{
-    Param(
-        [Parameter(Mandatory = $True)]
-        [string]$Key
-    )
-
-    [string]$output = reg unload "HKLM\$Key"
-    if ($Verbose) {
-        $output
-    }
-}
-
 function Prompt-PackageFamilyName
 {
     . $($PSScriptRoot + "\Process-UserSelection.ps1")
@@ -107,6 +20,21 @@ function Prompt-PackageFamilyName
     Process-UserSelection -AvailableChoices $modernAppPkgs -Title $title -Prompt $prompt
 }
 
+<#
+    .SYNOPSIS
+    Return the path to the settings hive file for the specified Modern app.
+
+    .DESCRIPTION
+    Return the path to the settings hive file for the specified Modern app.
+    
+    .PARAMETER PackageFamilyName
+    (Optional)
+    - If no PackageFamilyName is specified OR it is invalid, then prompt 
+    the user to select 1 from a list of all available package family names. 
+    Return the settings hive file path for the selected package.
+    - If specified, then just return the settings hive file for the 
+    specified package.
+#>
 function Get-ModernAppSettingsPath
 {
     Param(
@@ -117,6 +45,8 @@ function Get-ModernAppSettingsPath
     [string]$suffix = "\Settings\settings.dat"
     [string]$settingsPath = $prefix + $PackageFamilyName + $suffix
 
+    # Prompt if user did not specify PackageFamilyName OR 
+    # PackageFamilyName is invalid.
     if (!$PackageFamilyName -or !(Test-Path $settingsPath)) {
         $PackageFamilyName = Prompt-PackageFamilyName
         $settingsPath = $prefix + $PackageFamilyName + $suffix
@@ -174,6 +104,25 @@ function Access-ModernAppSettings
     Unload-HiveFromHKLM -Key $ToRegKey
 }
 
+<#
+    .SYNOPSIS
+    Create a new RegProperty Object to store details about a registry property.
+
+    .DESCRIPTION
+    Create a new RegProperty Object to store details about a registry property.
+
+    .PARAMETER Name
+    (Optional, default = NULL)
+    Name of the registry property.
+
+    .PARAMETER Value
+    (Optional, default = NULL)
+    Value of the registry property.
+
+    .PARAMETER DataType
+    (Optional, default = NULL)
+    Data type of the registry property.
+#>
 function New-RegProperty
 {
     Param(
@@ -189,7 +138,33 @@ function New-RegProperty
     return $output
 }
 
-function Get-ModernAppPropertyValue
+<#
+    .SYNOPSIS
+    Return a RegProperty object containing details about the specified 
+    property for the given Modern app.
+
+    .DESCRIPTION
+    Return a RegProperty object containing details about the specified 
+    property for the given Modern app.
+
+    .PARAMETER LoadToRegKey
+    (Required)
+    Load the specified Modern app's settings hive file to this registry
+    key under HKLM.
+
+    .PARAMETER RegPathToProperty
+    (Required)
+    Path under LoadToRegKey that leads to the key with the target property.
+
+    .PARAMETER PropertyName
+    (Required)
+    Name of the property that we want details about for the specified Modern app.
+
+    .PARAMETER PackageFamilyName
+    (Optional)
+    Package family name of the Modern app that contains the target property.
+#>
+function Get-ModernAppProperty
 {
     Param(
         [Parameter(Mandatory = $True)]
@@ -219,6 +194,37 @@ function Get-ModernAppPropertyValue
     }
 }
 
+<#
+    .SYNOPSIS
+    Update the value of the specified property in the given modern app.
+
+    .DESCRIPTION
+    Update the value of the specified property in the given modern app.
+
+    .PARAMETER LoadToRegKey
+    (Required)
+    Load the specified Modern app's settings hive file to this registry
+    key under HKLM.
+
+    .PARAMETER RegPathToProperty
+    (Required)
+    Path under LoadToRegKey that leads to the key with the target property.
+
+    .PARAMETER PropertyName
+    (Required)
+    Name of the property that we want to update for the specified Modern app.
+
+    .PARAMETER NewValue
+    Change the value of the target property to this value.
+
+    .PARAMETER PropertyType
+    (Optional)
+    Change the data type of the target property to the value in this parameter.
+
+    .PARAMETER PackageFamilyName
+    (Optional)
+    Package family name of the Modern app that contains the target property.
+#>
 function Set-ModernAppPropertyValue
 {
     Param(
@@ -242,6 +248,9 @@ function Set-ModernAppPropertyValue
     [string]$fullRegKeyPath = $LoadToRegKey + "\" + $RegPathToProperty
 
     Access-ModernAppSettings -PackageFamilyName $PackageFamilyName -ToRegKey $LoadToRegKey -ExecuteFunction {
+        # If the user specified an actual property type, then we can't safely use reg add since
+        # this value could be an unsupported type (e.g., hex value or REG_NONE). So, use a .reg
+        # file instead.
         if ($PropertyType) {            
             echo "Windows Registry Editor Version 5.00`n" > none.reg
             echo $("[HKEY_LOCAL_MACHINE\" + $fullRegKeyPath + "]`n") >> none.reg
@@ -249,6 +258,8 @@ function Set-ModernAppPropertyValue
             reg import none.reg
             del none.reg
         }
+        # Otherwise, if the user didn't specify a property type, get the current property type,
+        # and simply maintain it.
         else {
             [string]$type = $(Get-ModernAppPropertyValue -PackageFamilyName $PackageFamilyName `
                 -PropertyName $PropertyName -RegPathToProperty $RegPathToProperty -LoadToRegKey $LoadToRegKey).DataType
