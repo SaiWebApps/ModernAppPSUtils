@@ -251,12 +251,14 @@ function Set-ModernAppPropertyValue
         # If the user specified an actual property type, then we can't safely use reg add since
         # this value could be an unsupported type (e.g., hex value or REG_NONE). So, use a .reg
         # file instead.
-        if ($PropertyType) {            
-            echo "Windows Registry Editor Version 5.00`n" > none.reg
-            echo $("[HKEY_LOCAL_MACHINE\" + $fullRegKeyPath + "]`n") >> none.reg
-            echo $("`"" + $PropertyName + "`"=hex(" + $PropertyType + "):" + $NewValue) >> none.reg
-            reg import none.reg
-            del none.reg
+        if ($PropertyType) {
+            [string]$noneRegPath = $($PSScriptRoot + "\none.reg")
+
+            echo "Windows Registry Editor Version 5.00`n" > $noneRegPath
+            echo $("[HKEY_LOCAL_MACHINE\" + $fullRegKeyPath + "]`n") >> $noneRegPath
+            echo $("`"" + $PropertyName + "`"=hex(" + $PropertyType + "):" + $NewValue) >> $noneRegPath
+            reg import $noneRegPath
+            del $noneRegPath
         }
         # Otherwise, if the user didn't specify a property type, get the current property type,
         # and simply maintain it.
